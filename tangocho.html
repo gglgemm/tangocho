@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中学1年生 1200英単語マスター</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.3); }
+        .recording-pulse { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); } 70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); } 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); } }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen flex items-center justify-center p-4">
+
+    <div id="app" class="w-full max-w-lg">
+        <!-- ロード画面 -->
+        <div id="loading-screen" class="glass-card p-10 rounded-3xl shadow-xl text-center">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent mb-4"></div>
+            <p class="text-slate-600">単語データを読み込んでいます...</p>
+        </div>
+
+        <!-- 初期画面 -->
+        <div id="start-screen" class="hidden glass-card p-8 rounded-3xl shadow-xl text-center">
+            <h1 class="text-3xl font-bold text-slate-800 mb-2">English Master</h1>
+            <p class="text-blue-600 font-semibold mb-8">中学1年生 1200単語対応版</p>
+            
+            <div class="space-y-4">
+                <button onclick="startQuiz('normal')" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-5 rounded-2xl transition-all shadow-lg active:scale-95">
+                    クイズを開始する (5問)
+                </button>
+                <button id="review-btn" onclick="startQuiz('review')" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-5 rounded-2xl transition-all shadow-lg active:scale-95 hidden">
+                    苦手な単語を復習する (<span id="review-count">0</span>)
+                </button>
+            </div>
+        </div>
+
+        <!-- クイズ画面 -->
+        <div id="quiz-screen" class="hidden glass-card p-8 rounded-3xl shadow-xl">
+            <div class="flex justify-between items-center mb-6">
+                <span id="progress" class="text-sm font-semibold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">Question 1/5</span>
+                <button onclick="speakText(currentWord.en)" class="text-blue-500 hover:text-blue-700 bg-blue-50 p-2 rounded-full transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                </button>
+            </div>
+
+            <div class="text-center mb-8">
+                <h2 id="word-display" class="text-5xl font-bold text-slate-800 tracking-tight mb-2">Word</h2>
+                <div id="feedback" class="h-8 font-bold text-xl transition-all"></div>
+            </div>
+
+            <div id="options" class="space-y-3"></div>
+
+            <!-- 正解後の拡張エリア（例文・音読・採点） -->
+            <div id="expansion-area" class="mt-8 hidden border-t border-slate-200 pt-6">
+                <div class="bg-blue-50 p-6 rounded-2xl text-center">
+                    <p class="text-xs font-bold text-blue-400 uppercase tracking-widest mb-2">Example Sentence</p>
+                    <p id="example-en" class="text-xl font-semibold text-slate-800 italic mb-1"></p>
+                    <p id="example-ja" class="text-sm text-slate-500 mb-6"></p>
+                    
+                    <div id="voice-section" class="flex flex-col items-center space-y-4">
+                        <button id="record-btn" class="bg-blue-600 text-white w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-lg active:scale-95">
+                            <svg id="mic-svg" xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+                        </button>
+                        <p id="status-text" class="text-sm font-medium text-slate-400">マイクボタンを押して音読してください</p>
+                        
+                        <div id="score-display-area" class="hidden">
+                            <p class="text-slate-400 text-xs font-bold">PRONUNCIATION SCORE</p>
+                            <div id="score-value" class="text-4xl font-black text-blue-600">0</div>
+                            <button onclick="nextQuestion()" class="mt-4 bg-slate-800 hover:bg-slate-900 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-md">
+                                次の問題へ進む →
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 結果画面 -->
+        <div id="result-screen" class="hidden glass-card p-10 rounded-3xl shadow-xl text-center">
+            <h2 class="text-2xl font-bold text-slate-800 mb-4">お疲れ様でした！</h2>
+            <div class="text-6xl font-black text-blue-600 mb-8" id="total-score-display">0/0</div>
+            <button onclick="location.reload()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-5 rounded-2xl transition-all">
+                タイトルに戻る
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let masterWordList = [];
+        let currentQuestionIndex = 0;
+        let score = 0;
+        let shuffledList = [];
+        let currentWord = {};
+
+        // 音声認識（Web Speech API）の初期化
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+        
+        if (recognition) {
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
+            recognition.continuous = false; // 発話が終わったら自動停止
+        }
+
+        // データの読み込み
+        async function init() {
+            try {
+                // words.json から読み込み
+                const response = await fetch('words.json');
+                if (!response.ok) throw new Error();
+                masterWordList = await response.json();
+                
+                document.getElementById('loading-screen').classList.add('hidden');
+                document.getElementById('start-screen').classList.remove('hidden');
+                updateReviewStatus();
+            } catch (e) {
+                document.getElementById('loading-screen').innerHTML = `
+                    <p class="text-red-500 font-bold px-4">words.json の読み込みに失敗しました。<br>
+                    <span class="text-xs font-normal text-slate-400">サーバー経由で実行するか、同じフォルダにファイルを置いてください。</span></p>
+                `;
+            }
+        }
+
+        function updateReviewStatus() {
+            const reviews = JSON.parse(localStorage.getItem('reviewWords') || '[]');
+            const btn = document.getElementById('review-btn');
+            if (reviews.length > 0) {
+                btn.classList.remove('hidden');
+                document.getElementById('review-count').innerText = reviews.length;
+            }
+        }
+
+        function startQuiz(mode) {
+            if (mode === 'review') {
+                shuffledList = JSON.parse(localStorage.getItem('reviewWords') || '[]');
+            } else {
+                shuffledList = [...masterWordList].sort(() => Math.random() - 0.5).slice(0, 5);
+            }
+            
+            currentQuestionIndex = 0;
+            score = 0;
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('quiz-screen').classList.remove('hidden');
+            showQuestion();
+        }
+
+        function showQuestion() {
+            currentWord = shuffledList[currentQuestionIndex];
+            document.getElementById('word-display').innerText = currentWord.en;
+            document.getElementById('progress').innerText = `Question ${currentQuestionIndex + 1}/${shuffledList.length}`;
+            document.getElementById('feedback').innerText = '';
+            document.getElementById('expansion-area').classList.add('hidden');
+            document.getElementById('score-display-area').classList.add('hidden');
+            document.getElementById('record-btn').classList.remove('hidden');
+            document.getElementById('status-text').classList.remove('hidden');
+            document.getElementById('status-text').innerText = "マイクボタンを押して音読してください";
+            document.getElementById('status-text').className = "text-sm font-medium text-slate-400";
+
+            let options = [currentWord.ja];
+            while (options.length < 3) {
+                const random = masterWordList[Math.floor(Math.random() * masterWordList.length)].ja;
+                if (!options.includes(random)) options.push(random);
+            }
+            options.sort(() => Math.random() - 0.5);
+
+            const container = document.getElementById('options');
+            container.innerHTML = '';
+            options.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = "w-full text-left p-4 rounded-xl border-2 border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition-all font-semibold text-slate-700";
+                btn.innerText = opt;
+                btn.onclick = () => checkAnswer(opt, btn);
+                container.appendChild(btn);
+            });
+
+            speakText(currentWord.en);
+        }
+
+        function checkAnswer(selected, btn) {
+            const buttons = document.querySelectorAll('#options button');
+            buttons.forEach(b => b.disabled = true);
+
+            if (selected === currentWord.ja) {
+                score++;
+                btn.classList.add('bg-green-100', 'border-green-500', 'text-green-700');
+                document.getElementById('feedback').innerText = '正解！ Perfect!';
+                document.getElementById('feedback').className = 'h-8 font-bold text-xl text-green-500';
+                showExpansion();
+            } else {
+                btn.classList.add('bg-red-100', 'border-red-500', 'text-red-700');
+                document.getElementById('feedback').innerText = `正解: ${currentWord.ja}`;
+                document.getElementById('feedback').className = 'h-8 font-bold text-xl text-red-500';
+                saveToReview(currentWord);
+                // 不正解の場合は音読なしで次へ（2秒後）
+                setTimeout(nextQuestion, 2000);
+            }
+        }
+
+        function showExpansion() {
+            const area = document.getElementById('expansion-area');
+            area.classList.remove('hidden');
+            document.getElementById('example-en').innerText = currentWord.ex;
+            document.getElementById('example-ja').innerText = currentWord.ex_ja;
+            
+            // 少し遅らせて例文を読み上げ
+            setTimeout(() => speakText(currentWord.ex), 600);
+
+            const recBtn = document.getElementById('record-btn');
+            recBtn.onclick = startRecording;
+        }
+
+        function startRecording() {
+            if (!recognition) {
+                alert("音声認識がサポートされていないブラウザです。Chromeでお試しください。");
+                return;
+            }
+
+            const recBtn = document.getElementById('record-btn');
+            const status = document.getElementById('status-text');
+            
+            recBtn.classList.add('recording-pulse');
+            status.innerText = "Listening... (話し終わるのを待っています)";
+            status.className = "text-sm font-bold text-blue-500 animate-pulse";
+            
+            recognition.start();
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript.toLowerCase();
+                processResult(transcript);
+            };
+
+            recognition.onerror = () => {
+                recBtn.classList.remove('recording-pulse');
+                status.innerText = "エラーが発生しました。もう一度お試しください。";
+                status.className = "text-sm font-medium text-red-400";
+            };
+
+            recognition.onspeechend = () => {
+                recognition.stop();
+                recBtn.classList.remove('recording-pulse');
+            };
+        }
+
+        function processResult(transcript) {
+            const original = currentWord.ex.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
+            
+            // 判定ロジック: 含まれている単語の割合などでスコアリング
+            const targetWords = original.split(" ");
+            const spokenWords = transcript.split(" ");
+            let matchCount = 0;
+            
+            targetWords.forEach(word => {
+                if (transcript.includes(word)) matchCount++;
+            });
+
+            let finalScore = Math.floor((matchCount / targetWords.length) * 100);
+            
+            // 学習モチベーションのため、最低点とランダムな微調整を追加
+            if (finalScore > 0) finalScore = Math.min(100, finalScore + Math.floor(Math.random() * 10));
+            if (finalScore < 30 && transcript.length > 5) finalScore = 45; // 何か喋っていればおまけ
+
+            // UI更新
+            document.getElementById('record-btn').classList.add('hidden');
+            document.getElementById('status-text').classList.add('hidden');
+            document.getElementById('score-display-area').classList.remove('hidden');
+            document.getElementById('score-value').innerText = finalScore;
+            
+            // スコアに応じて色を変える
+            const val = document.getElementById('score-value');
+            if (finalScore >= 80) val.className = "text-4xl font-black text-green-500";
+            else if (finalScore >= 50) val.className = "text-4xl font-black text-blue-600";
+            else val.className = "text-4xl font-black text-orange-500";
+        }
+
+        function nextQuestion() {
+            currentQuestionIndex++;
+            if (currentQuestionIndex < shuffledList.length) {
+                showQuestion();
+            } else {
+                showResult();
+            }
+        }
+
+        function saveToReview(word) {
+            let reviews = JSON.parse(localStorage.getItem('reviewWords') || '[]');
+            if (!reviews.some(w => w.en === word.en)) {
+                reviews.push(word);
+                localStorage.setItem('reviewWords', JSON.stringify(reviews));
+            }
+        }
+
+        function showResult() {
+            document.getElementById('quiz-screen').classList.add('hidden');
+            document.getElementById('result-screen').classList.remove('hidden');
+            document.getElementById('total-score-display').innerText = `${score}/${shuffledList.length}`;
+            updateReviewStatus();
+        }
+
+        function speakText(text) {
+            window.speechSynthesis.cancel();
+            const uttr = new SpeechSynthesisUtterance(text);
+            uttr.lang = 'en-US';
+            uttr.rate = 0.85;
+            window.speechSynthesis.speak(uttr);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
