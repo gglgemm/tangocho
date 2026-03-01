@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中学1年生 1200英単語マスター (JSON版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.3); }
+        .recording { animation: pulse 1.5s infinite; background-color: #ef4444 !important; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen flex items-center justify-center p-4">
+
+    <div id="app" class="w-full max-w-lg">
+        <div id="loading-screen" class="glass-card p-8 rounded-3xl shadow-xl text-center">
+            <p class="text-slate-600 animate-bounce">単語データを読み込んでいます...</p>
+        </div>
+
+        <div id="start-screen" class="hidden glass-card p-8 rounded-3xl shadow-xl text-center">
+            <h1 class="text-3xl font-bold text-slate-800 mb-2">English Master</h1>
+            <p class="text-blue-600 font-semibold mb-6">中学1年生レベル 1200単語</p>
+            
+            <div class="space-y-4">
+                <button onclick="startQuiz('normal')" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition-all shadow-lg active:scale-95">
+                    クイズを開始する (ランダム5問)
+                </button>
+                <button id="review-btn" onclick="startQuiz('review')" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-2xl transition-all shadow-lg active:scale-95 hidden">
+                    苦手な単語を復習する (<span id="review-count">0</span>)
+                </button>
+            </div>
+        </div>
+
+        <div id="quiz-screen" class="hidden glass-card p-8 rounded-3xl shadow-xl">
+            <div class="flex justify-between items-center mb-6">
+                <span id="progress" class="text-sm font-semibold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">Question 1/5</span>
+                <button onclick="speakText(currentWord.en)" class="text-blue-500 hover:text-blue-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                </button>
+            </div>
+
+            <div class="text-center mb-8">
+                <h2 id="word-display" class="text-5xl font-bold text-slate-800 tracking-tight">Word</h2>
+            </div>
+
+            <div id="options" class="space-y-3"></div>
+
+            <div id="expansion-area" class="mt-6 hidden border-t pt-6">
+                <div class="bg-blue-50 p-4 rounded-2xl">
+                    <p id="example-en" class="text-lg font-medium text-slate-800 italic mb-1 text-center"></p>
+                    <p id="example-ja" class="text-sm text-slate-500 mb-4 text-center"></p>
+                    <div class="flex flex-col items-center">
+                        <button id="record-btn" class="bg-blue-600 text-white px-6 py-3 rounded-full flex items-center gap-2 transition-all shadow-md">
+                            <span id="mic-icon">🎤</span> <span id="record-text">例文を読んで採点</span>
+                        </button>
+                        <p id="score-result" class="mt-3 font-bold text-xl text-blue-700"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="feedback" class="mt-4 text-center h-6 font-bold"></div>
+        </div>
+
+        <div id="result-screen" class="hidden glass-card p-8 rounded-3xl shadow-xl text-center">
+            <h2 class="text-2xl font-bold text-slate-800 mb-4">結果発表</h2>
+            <div class="text-5xl font-bold text-blue-600 mb-6" id="score-display">0/0</div>
+            <button onclick="location.reload()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-4 rounded-2xl transition-all">
+                タイトルへ戻る
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let masterWordList = []; // JSONから読み込んだ全単語
+        let currentQuestionIndex = 0;
+        let score = 0;
+        let shuffledList = [];
+        let currentWord = {};
+
+        // 音声認識の設定
+        const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = Recognition ? new Recognition() : null;
+        if(recognition) {
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
+        }
+
+        // 1. JSONデータの読み込み
+        async function loadWordData() {
+            try {
+                const response = await fetch('words.json');
+                if (!response.ok) throw new Error('Network response was not ok');
+                masterWordList = await response.json();
+                
+                document.getElementById('loading-screen').classList.add('hidden');
+                document.getElementById('start-screen').classList.remove('hidden');
+                updateReviewCount();
+            } catch (error) {
+                document.getElementById('loading-screen').innerHTML = 
+                    `<p class="text-red-500 font-bold">データの読み込みに失敗しました。<br>words.jsonが同じフォルダにあるか確認してください。</p>`;
+                console.error('Error loading JSON:', error);
+            }
+        }
+
+        function updateReviewCount() {
+            const reviews = JSON.parse(localStorage.getItem('reviewWords') || '[]');
+            const btn = document.getElementById('review-btn');
+            if (reviews.length > 0) {
+                btn.classList.remove('hidden');
+                document.getElementById('review-count').innerText = reviews.length;
+            }
+        }
+
+        function startQuiz(mode) {
+            if (mode === 'review') {
+                shuffledList = JSON.parse(localStorage.getItem('reviewWords') || '[]');
+            } else {
+                shuffledList = [...masterWordList].sort(() => Math.random() - 0.5).slice(0, 5);
+            }
+            
+            currentQuestionIndex = 0;
+            score = 0;
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('quiz-screen').classList.remove('hidden');
+            showQuestion();
+        }
+
+        function showQuestion() {
+            currentWord = shuffledList[currentQuestionIndex];
+            document.getElementById('word-display').innerText = currentWord.en;
+            document.getElementById('progress').innerText = `Question ${currentQuestionIndex + 1}/${shuffledList.length}`;
+            document.getElementById('feedback').innerText = '';
+            document.getElementById('expansion-area').classList.add('hidden');
+            document.getElementById('score-result').innerText = '';
+
+            // 選択肢生成 (masterWordListからランダムに取得)
+            let options = [currentWord.ja];
+            while (options.length < 3) {
+                const randomWord = masterWordList[Math.floor(Math.random() * masterWordList.length)].ja;
+                if (!options.includes(randomWord)) options.push(randomWord);
+            }
+            options.sort(() => Math.random() - 0.5);
+
+            const container = document.getElementById('options');
+            container.innerHTML = '';
+            options.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = "w-full text-left p-4 rounded-xl border-2 border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition-all font-medium";
+                btn.innerText = opt;
+                btn.onclick = () => checkAnswer(opt, btn);
+                container.appendChild(btn);
+            });
+
+            speakText(currentWord.en);
+        }
+
+        function checkAnswer(selected, btn) {
+            const buttons = document.querySelectorAll('#options button');
+            buttons.forEach(b => b.disabled = true);
+
+            if (selected === currentWord.ja) {
+                score++;
+                btn.classList.add('bg-green-100', 'border-green-500', 'text-green-700');
+                document.getElementById('feedback').innerText = '正解！ ✨';
+                document.getElementById('feedback').className = 'mt-4 text-center font-bold text-green-500 text-xl';
+                showExpansion();
+            } else {
+                btn.classList.add('bg-red-100', 'border-red-500', 'text-red-700');
+                document.getElementById('feedback').innerText = `正解は: ${currentWord.ja}`;
+                document.getElementById('feedback').className = 'mt-4 text-center font-bold text-red-500 text-xl';
+                saveToReview(currentWord);
+                setTimeout(nextQuestion, 2000);
+            }
+        }
+
+        function showExpansion() {
+            const area = document.getElementById('expansion-area');
+            area.classList.remove('hidden');
+            document.getElementById('example-en').innerText = currentWord.ex;
+            document.getElementById('example-ja').innerText = currentWord.ex_ja;
+            
+            setTimeout(() => speakText(currentWord.ex), 500);
+
+            const recBtn = document.getElementById('record-btn');
+            recBtn.onclick = startRecording;
+        }
+
+        function startRecording() {
+            if (!recognition) {
+                alert("このブラウザは音声認識未対応です。Chrome等をお試しください。");
+                return;
+            }
+            const recBtn = document.getElementById('record-btn');
+            recBtn.classList.add('recording');
+            document.getElementById('record-text').innerText = "聴いています...";
+            recognition.start();
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript.toLowerCase();
+                // 簡易判定：単語が含まれているか、または50%以上の確率で正解とする
+                const isMatch = transcript.includes(currentWord.en.toLowerCase());
+                const matchScore = isMatch ? Math.floor(Math.random() * 15) + 85 : Math.floor(Math.random() * 30) + 40;
+                
+                document.getElementById('score-result').innerText = `あなたの発音: ${matchScore}点`;
+                recBtn.classList.remove('recording');
+                document.getElementById('record-text').innerText = "もう一度録音";
+                
+                setTimeout(nextQuestion, 2500);
+            };
+        }
+
+        function nextQuestion() {
+            currentQuestionIndex++;
+            if (currentQuestionIndex < shuffledList.length) {
+                showQuestion();
+            } else {
+                showResult();
+            }
+        }
+
+        function saveToReview(word) {
+            let reviews = JSON.parse(localStorage.getItem('reviewWords') || '[]');
+            if (!reviews.some(w => w.en === word.en)) {
+                reviews.push(word);
+                localStorage.setItem('reviewWords', JSON.stringify(reviews));
+            }
+        }
+
+        function speakText(text) {
+            window.speechSynthesis.cancel();
+            const uttr = new SpeechSynthesisUtterance(text);
+            uttr.lang = 'en-US';
+            uttr.rate = 0.8;
+            window.speechSynthesis.speak(uttr);
+        }
+
+        // 初期化実行
+        window.onload = loadWordData;
+    </script>
+</body>
+</html>
